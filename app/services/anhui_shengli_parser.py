@@ -95,6 +95,17 @@ def _parse_item_result_block(
     return [(default_item or "item", merged)] if merged else []
 
 
+def _derive_group_from_payload(text: str | None) -> str | None:
+    lines = _normalize_lines(text)
+    for line in lines:
+        if re.match(r"^[^:=\uff1a|]+[:=\uff1a|]\s*/?\s*$", line):
+            continue
+        pair = _split_item_result(line)
+        if pair and not _looks_like_identifier(pair[0]):
+            return pair[0]
+    return None
+
+
 def _looks_like_date(value: str | None) -> bool:
     return bool(value and DATE_RE.match(value))
 
@@ -277,13 +288,21 @@ def build_anhui_shengli_tables(
         if not any((normalized_test_date, test_group, payload_text, extra_result)):
             return
 
+        effective_group = test_group
+        if _looks_like_identifier(effective_group):
+            _append_issue(issue_counts, issue_rows, f"{section_label}_numeric_test_group", source_row_no)
+            effective_group = None
+
+        if not effective_group:
+            effective_group = _derive_group_from_payload(payload_text)
+
         parsed_pairs = _parse_item_result_block(
             payload_text,
-            default_item=test_group or section_label,
+            default_item=effective_group or section_label,
         )
 
-        if not parsed_pairs and test_group and extra_result and not _looks_like_date(extra_result):
-            parsed_pairs = [(test_group, extra_result)]
+        if not parsed_pairs and effective_group and extra_result and not _looks_like_date(extra_result):
+            parsed_pairs = [(effective_group, extra_result)]
             extra_result = None
 
         for item_name, item_result in parsed_pairs:
@@ -293,7 +312,7 @@ def build_anhui_shengli_tables(
                     source_row_no=source_row_no,
                     source_file=source_file.name,
                     test_date=normalized_test_date,
-                    test_group=test_group or section_label,
+                    test_group=effective_group or section_label,
                     item_name=item_name,
                     item_result=item_result,
                 )
@@ -309,7 +328,7 @@ def build_anhui_shengli_tables(
                         source_row_no=source_row_no,
                         source_file=source_file.name,
                         test_date=normalized_test_date,
-                        test_group=test_group or section_label,
+                        test_group=effective_group or section_label,
                         item_name=extra_item_name or "extra_result",
                         item_result=extra_result,
                     )
@@ -360,6 +379,10 @@ def build_anhui_shengli_tables(
             _append_issue(issue_counts, issue_rows, "micro_shifted_left", source_row_no)
             micro_date = None
             micro_group, micro_payload = micro_sample_no, micro_group
+
+        if _looks_like_identifier(micro_group) and micro_sample_no and not _looks_like_identifier(micro_sample_no):
+            _append_issue(issue_counts, issue_rows, "micro_numeric_test_group", source_row_no)
+            micro_group = micro_sample_no
 
         if not any((micro_date, micro_group, micro_payload)) and _looks_like_date(micro_extra):
             _append_issue(issue_counts, issue_rows, "micro_orphan_shifted_date", source_row_no)
@@ -581,7 +604,9 @@ def build_anhui_shengli_tables(
         "micro_orphan_shifted_date": "micro rows with only a shifted date were ignored",
         "micro_shifted_left": "micro rows were auto realigned from a left-shifted layout",
         "micro_shifted_other_date": "micro rows carried a shifted date that likely belongs to the other-method section",
+        "micro_numeric_test_group": "micro rows had a numeric test_group and were reset from nearby text",
         "micro_invalid_test_date": "micro rows had a non-date test_date",
+        "csf_culture_numeric_test_group": "csf-culture rows had a numeric test_group and were reset from payload text",
         "other_shifted_left": "other-method rows were auto realigned from a left-shifted layout",
         "other_numeric_test_group": "other-method rows had a numeric test_group and were reset to the default label",
         "other_orphan_trailing_date": "other-method rows with only a trailing date were ignored",
