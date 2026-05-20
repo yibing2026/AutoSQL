@@ -25,6 +25,7 @@ from app.services.import_jobs import (
     get_engine,
     write_tables,
 )
+from app.services.medical_schema import build_standard_medical_tables
 
 
 class DataImportAgentService:
@@ -113,6 +114,12 @@ class DataImportAgentService:
                 source_file,
                 table_prefix=normalized_prefix,
             )
+            standard_tables, standard_notes = build_standard_medical_tables(
+                tables,
+                table_prefix=f"{normalized_prefix}_std",
+            )
+            tables = {**tables, **standard_tables}
+            notes.extend(standard_notes)
             notes.append("Used specialized Anhui Shengli template parser.")
         else:
             tables, notes = build_workbook_tables(

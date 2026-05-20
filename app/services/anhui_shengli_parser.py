@@ -212,6 +212,25 @@ def _append_issue(
         issue_rows[issue_key].append(source_row_no)
 
 
+def _build_issue_rows(
+    *,
+    issue_counts: dict[str, int],
+    issue_rows: dict[str, list[int]],
+    source_file: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for issue_key in sorted(issue_counts.keys()):
+        rows.append(
+            {
+                "issue_type": issue_key,
+                "issue_count": issue_counts[issue_key],
+                "sample_source_rows": ", ".join(str(row_no) for row_no in issue_rows.get(issue_key, [])),
+                "source_file": source_file,
+            }
+        )
+    return rows
+
+
 def _looks_like_identifier(value: str | None) -> bool:
     return bool(value and re.fullmatch(r"\d{6,}", value))
 
@@ -260,6 +279,7 @@ def build_anhui_shengli_tables(
     micro_rows: list[dict[str, Any]] = []
     other_rows: list[dict[str, Any]] = []
     img_rows: list[dict[str, Any]] = []
+    issue_audit_rows: list[dict[str, Any]] = []
 
     issue_counts: dict[str, int] = defaultdict(int)
     issue_rows: dict[str, list[int]] = defaultdict(list)
@@ -619,5 +639,14 @@ def build_anhui_shengli_tables(
             continue
         rows = ", ".join(str(row_no) for row_no in issue_rows.get(issue_key, []))
         notes.append(f"Quality check: {count} {label}. Sample source rows: {rows}.")
+
+    issue_audit_rows.extend(
+        _build_issue_rows(
+            issue_counts=issue_counts,
+            issue_rows=issue_rows,
+            source_file=source_file.name,
+        )
+    )
+    tables[f"{prefix}_issue_audit"] = pd.DataFrame(issue_audit_rows)
 
     return tables, notes

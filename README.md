@@ -80,6 +80,7 @@ Optional fields:
 Modes:
 
 - `workbook_file`: import one local workbook directly; common workbooks are loaded per sheet, and the Anhui Shengli template is parsed into linked clinical/statistics tables
+- for recognized hospital templates, the service can also build unified medical-schema tables for cross-hospital expansion
 - `auto`: try both import paths
 - `cached_summary`: only run the cached MQ summary import
 - `downloaded_data`: only run the downloaded directory import
@@ -204,6 +205,32 @@ Additional parser cleanup for the Anhui template:
 - patient name and recorder name are removed
 - slash-only values such as `/` are normalized to null
 - a built-in quality check adds warnings to the import notes for shifted or suspicious rows
+
+## Unified medical schema
+
+The project now starts to expose a cross-hospital standard schema alongside hospital-specific tables.
+
+Current standard tables:
+
+- `ahs_std_patient`
+- `ahs_std_encounter`
+- `ahs_std_sample`
+- `ahs_std_lab_item`
+- `ahs_std_culture_item`
+- `ahs_std_imaging_item`
+- `ahs_std_import_issue`
+
+Current issue-audit behavior:
+
+- template-specific parser warnings are also materialized into `*_issue_audit`
+- those warnings are then mapped into `*_std_import_issue`
+- this lets downstream systems query quality issues as rows instead of only reading free-text notes
+
+Design goal:
+
+- use hospital-specific parsers only for source understanding
+- map parsed results into a shared medical statistics schema
+- let future hospitals reuse the same downstream query model instead of creating a new database design every time
 
 ## Notes
 
