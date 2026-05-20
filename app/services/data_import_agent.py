@@ -25,7 +25,10 @@ from app.services.import_jobs import (
     get_engine,
     write_tables,
 )
-from app.services.medical_schema import build_standard_medical_tables
+from app.services.medical_schema import (
+    build_generic_standard_medical_tables,
+    build_standard_medical_tables,
+)
 
 
 class DataImportAgentService:
@@ -126,6 +129,13 @@ class DataImportAgentService:
                 source_file,
                 table_prefix=normalized_prefix,
             )
+            standard_tables, standard_notes = build_generic_standard_medical_tables(
+                tables,
+                table_prefix=normalized_prefix,
+            )
+            tables = {**tables, **standard_tables}
+            notes.extend(standard_notes)
+            notes.append("Used generic workbook structure recognizer.")
         resolved_database_name = self._resolve_database_name(
             requested_name=target_database_name,
             workbook_seed=normalized_prefix,

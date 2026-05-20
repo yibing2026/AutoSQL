@@ -232,6 +232,12 @@ Design goal:
 - map parsed results into a shared medical statistics schema
 - let future hospitals reuse the same downstream query model instead of creating a new database design every time
 
+Current generic recognizer behavior:
+
+- non-Anhui workbooks now keep their raw per-sheet tables and also generate `*_std_*` tables
+- if a worksheet is a merged clinical template with many `Unnamed:` columns, the recognizer will try to rebuild headers from in-sheet layout rows before extracting patient/sample/lab/imaging data
+- if key identity fields still cannot be recognized, the agent writes an `id_fields_not_recognized` row into `*_std_import_issue`
+
 ## Notes
 
 - SQLite is only used for local run history
