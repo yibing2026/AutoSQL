@@ -21,6 +21,16 @@ class ImportDatabaseConfig(BaseModel):
 class ImportRunRequest(BaseModel):
     mode: ImportMode = ImportMode.auto
     dry_run: bool = False
+    review_with_ai: bool = Field(
+        default=False,
+        description="Whether to run an automatic post-import quality review.",
+    )
+    review_sample_rows: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="How many sample rows per table to include in the quality review.",
+    )
     target_database_name: str = Field(
         default="",
         description="Optional PostgreSQL database name for this import run.",
@@ -43,6 +53,25 @@ class ImportRunRequest(BaseModel):
     )
 
 
+class ImportQualityFinding(BaseModel):
+    severity: str
+    table_name: str
+    column_name: str | None = None
+    issue_code: str
+    description: str
+    suggestion: str = ""
+    evidence: list[str] = Field(default_factory=list)
+
+
+class ImportQualityReview(BaseModel):
+    enabled: bool
+    used_ai: bool = False
+    model: str | None = None
+    summary: str = ""
+    findings: list[ImportQualityFinding] = Field(default_factory=list)
+    table_previews: dict[str, list[dict[str, str | int | float | None]]] = Field(default_factory=dict)
+
+
 class ImportJobResult(BaseModel):
     job_name: str
     discovered: bool
@@ -51,6 +80,7 @@ class ImportJobResult(BaseModel):
     tables: dict[str, int] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
     skipped_reason: str | None = None
+    quality_review: ImportQualityReview | None = None
 
 
 class ImportRunResponse(BaseModel):

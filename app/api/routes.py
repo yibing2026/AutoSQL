@@ -40,6 +40,8 @@ def run_import_agent(request: ImportRunRequest) -> ImportRunResponse:
 async def upload_and_import_workbook(
     file: UploadFile = File(...),
     dry_run: bool = Form(default=True),
+    review_with_ai: bool = Form(default=False),
+    review_sample_rows: int = Form(default=3),
     workbook_table_prefix: str = Form(default=""),
     target_database_name: str = Form(default=""),
 ) -> ImportRunResponse:
@@ -50,6 +52,8 @@ async def upload_and_import_workbook(
             filename=file.filename or "upload.xlsx",
             content=content,
             dry_run=dry_run,
+            review_with_ai=review_with_ai,
+            review_sample_rows=review_sample_rows,
             table_prefix=workbook_table_prefix,
             target_database_name=target_database_name,
         )

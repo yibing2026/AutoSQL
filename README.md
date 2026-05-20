@@ -238,6 +238,14 @@ Current generic recognizer behavior:
 - if a worksheet is a merged clinical template with many `Unnamed:` columns, the recognizer will try to rebuild headers from in-sheet layout rows before extracting patient/sample/lab/imaging data
 - if key identity fields still cannot be recognized, the agent writes an `id_fields_not_recognized` row into `*_std_import_issue`
 
+Automatic quality review:
+
+- `/api/v1/imports/run` accepts `review_with_ai` and `review_sample_rows`
+- `/api/v1/imports/upload` accepts the same two form fields
+- when enabled, the import response includes `quality_review`
+- the review first runs local rule-based checks, then adds an OpenAI summary when `OPENAI_API_KEY` is configured
+- current checks focus on non-numeric age, suspicious date columns, numeric pollution in `test_group`, empty results after `:` and whether units / reference ranges seem absent from `item_result`
+
 ## Notes
 
 - SQLite is only used for local run history

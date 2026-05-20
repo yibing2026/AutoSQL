@@ -29,12 +29,14 @@ from app.services.medical_schema import (
     build_generic_standard_medical_tables,
     build_standard_medical_tables,
 )
+from app.services.import_quality_agent import ImportQualityAgentService
 
 
 class DataImportAgentService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.repository = ImportHistoryRepository()
+        self.quality_agent = ImportQualityAgentService()
 
     def _database_config(self, database_name: str | None = None) -> ImportDatabaseConfig:
         return ImportDatabaseConfig(
@@ -109,6 +111,8 @@ class DataImportAgentService:
         dry_run: bool,
         target_database_name: str,
         display_source: str | None = None,
+        review_with_ai: bool = False,
+        review_sample_rows: int = 3,
     ) -> tuple[ImportJobResult, str]:
         prefix_seed = table_prefix.strip() or Path(display_source or source_file.name).stem or "workbook"
         normalized_prefix = self._sanitize_db_name(prefix_seed)
@@ -143,6 +147,15 @@ class DataImportAgentService:
         )
         table_counts = {table_name: len(df) for table_name, df in tables.items()}
         source_label = display_source or str(source_file)
+        quality_review = None
+        if review_with_ai:
+            quality_review = self.quality_agent.review_tables(
+                tables=tables,
+                notes=notes,
+                source=source_label,
+                sample_rows=review_sample_rows,
+                prefer_ai=True,
+            )
 
         if dry_run:
             notes.append("Dry run only: database write was skipped.")
@@ -154,6 +167,7 @@ class DataImportAgentService:
                     source=source_label,
                     tables=table_counts,
                     notes=notes,
+                    quality_review=quality_review,
                 ),
                 resolved_database_name,
             )
@@ -170,6 +184,7 @@ class DataImportAgentService:
                 source=source_label,
                 tables=actual_counts,
                 notes=notes,
+                quality_review=quality_review,
             ),
             resolved_database_name,
         )
@@ -205,6 +220,15 @@ class DataImportAgentService:
             "Imported from the cached MQ summary workbook.",
             "Patient and doctor name columns are removed before loading.",
         ]
+        quality_review = None
+        if request.review_with_ai:
+            quality_review = self.quality_agent.review_tables(
+                tables=tables,
+                notes=notes,
+                source=str(source_file),
+                sample_rows=request.review_sample_rows,
+                prefer_ai=True,
+            )
 
         if request.dry_run:
             notes.append("Dry run only: database write was skipped.")
@@ -215,6 +239,7 @@ class DataImportAgentService:
                 source=str(source_file),
                 tables=table_counts,
                 notes=notes,
+                quality_review=quality_review,
             )
 
         resolved_database_name = self._resolve_database_name(
@@ -231,6 +256,7 @@ class DataImportAgentService:
             source=str(source_file),
             tables=actual_counts,
             notes=notes,
+            quality_review=quality_review,
         )
 
     def _run_workbook_file_job(self, request: ImportRunRequest) -> ImportJobResult:
@@ -247,6 +273,8 @@ class DataImportAgentService:
             table_prefix=request.workbook_table_prefix,
             dry_run=request.dry_run,
             target_database_name=request.target_database_name,
+            review_with_ai=request.review_with_ai,
+            review_sample_rows=request.review_sample_rows,
         )
         return job
 
@@ -258,6 +286,8 @@ class DataImportAgentService:
         dry_run: bool,
         table_prefix: str = "",
         target_database_name: str = "",
+        review_with_ai: bool = False,
+        review_sample_rows: int = 3,
     ) -> ImportRunResponse:
         suffix = Path(filename or "upload.xlsx").suffix.lower()
         if suffix not in {".xlsx", ".xls", ".csv"}:
@@ -275,6 +305,8 @@ class DataImportAgentService:
                 dry_run=dry_run,
                 target_database_name=target_database_name,
                 display_source=filename,
+                review_with_ai=review_with_ai,
+                review_sample_rows=review_sample_rows,
             )
             status = "completed" if job.executed else "planned"
             response = ImportRunResponse(
@@ -307,6 +339,15 @@ class DataImportAgentService:
         tables, notes = build_downloaded_tables(root)
         table_counts = {table_name: len(df) for table_name, df in tables.items()}
         has_rows = any(count > 0 for count in table_counts.values())
+        quality_review = None
+        if request.review_with_ai and has_rows:
+            quality_review = self.quality_agent.review_tables(
+                tables=tables,
+                notes=notes,
+                source=str(root),
+                sample_rows=request.review_sample_rows,
+                prefer_ai=True,
+            )
 
         if not has_rows:
             return ImportJobResult(
@@ -317,6 +358,7 @@ class DataImportAgentService:
                 tables=table_counts,
                 notes=notes,
                 skipped_reason="Downloaded root exists, but no importable data was found.",
+                quality_review=quality_review,
             )
 
         if request.dry_run:
@@ -328,6 +370,7 @@ class DataImportAgentService:
                 source=str(root),
                 tables=table_counts,
                 notes=notes,
+                quality_review=quality_review,
             )
 
         resolved_database_name = self._resolve_database_name(
@@ -344,6 +387,7 @@ class DataImportAgentService:
             source=str(root),
             tables=actual_counts,
             notes=notes,
+            quality_review=quality_review,
         )
 
     def run_import(self, request: ImportRunRequest) -> ImportRunResponse:
@@ -370,6 +414,8 @@ class DataImportAgentService:
                     dry_run=request.dry_run,
                     target_database_name=request.target_database_name,
                     display_source=request.workbook_source or None,
+                    review_with_ai=request.review_with_ai,
+                    review_sample_rows=request.review_sample_rows,
                 )
                 jobs.append(workbook_job)
         if request.mode in {ImportMode.auto, ImportMode.cached_summary}:
